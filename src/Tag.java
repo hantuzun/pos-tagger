@@ -7,9 +7,11 @@ public final class Tag {
         "PRP", "PRP$", "RB", "RBR", "RBS", "RP", "SYM", "TO", "UH", "VB", "VBD", "VBG", "VBN", "VBP", "VBZ", 
         "WDT", "WP", "WP$", "WRB", "$", "#", "``", "''", "-LRB-", "-RRB-", ",", ".", ":", "<t_(N+1)>"));
 
+    private String tag;
     public static final int count = tags.size();
 
-    private String tag;
+    public Tag() {}
+
     public Tag(String tag) {
         if (tags.contains(tag))
             this.tag = tag;
@@ -17,9 +19,22 @@ public final class Tag {
             throw new IllegalArgumentException("\'" + tag + "\' is not a valid POS tag.");
     }
 
+    public String getTag() {
+        return tag;
+    }
+
+    @Override
+    public String toString() {
+        return tag;
+    }
+
     @Override
     public int hashCode() {
-        return tag.hashCode();
+        int hash = 41321231;
+        for (int i = 0; i < tag.length(); i++) {
+            hash *= tag.charAt(i) + 312907;
+        }
+        return hash;
     }
 
     @Override
@@ -28,14 +43,9 @@ public final class Tag {
             return false;
         else if (!(o instanceof Tag))
             return false;
-        else if (this.tag != ((Tag) o).tag)
+        else if (!this.getTag().equals(((Tag) o).getTag()))
             return false;
         else
             return true;
-    }
-
-    @Override
-    public String toString() {
-        return tag;
     }
 }
