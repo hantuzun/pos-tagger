@@ -14,32 +14,32 @@ public class build_tagger {
     private static File modelFile;
     private static Boolean debug = false;
 
+    private static int typeCount;
+    private static int tokenCount;
+    private static HashMap<String, Integer> wordCount = new HashMap<String, Integer>();
+
     // P(w_3 | t_3) = f(w_3, t_3) / f(t_3)
     private static HashMap<Tag, HashMap<String, Integer>> lexicalCount = new HashMap<Tag, HashMap<String, Integer>>();
-    private static HashMap<Tag, HashMap<String, Double>> emissionProbability = new HashMap<Tag, HashMap<String, Double>>();
 
     // P'(t_3) = f(t_3) / V  
     private static HashMap<Tag, Integer> unigramCount = new HashMap<Tag, Integer>();
     private static HashMap<Tag, Double> unigram = new HashMap<Tag, Double>();  
     
-    // P'(t_3 | t_2) = f(t_3 | t_2) / f(t_2)
+    // P'(t_3 | t_2) = f(t_2, t_3) / f(t_2)
     private static HashMap<Tag, HashMap<Tag, Integer>> bigramCount = new  HashMap<Tag, HashMap<Tag, Integer>>();
     private static HashMap<Tag, HashMap<Tag, Double>> bigram = new  HashMap<Tag, HashMap<Tag, Double>>();
     
-    // P'(t_3 | t_2, t_1) = f(t_1, t_2, t_3) / f(t_1, t_2)
+    // P'(t_3 | t_1, t_2) = f(t_1, t_2, t_3) / f(t_1, t_2)
     private static HashMap<Tag, HashMap<Tag, HashMap<Tag, Integer>>> trigramCount = new HashMap<Tag, HashMap<Tag, HashMap<Tag, Integer>>>();
     private static HashMap<Tag, HashMap<Tag, HashMap<Tag, Double>>> trigram = new HashMap<Tag, HashMap<Tag, HashMap<Tag, Double>>>();
     
-    // P(t_3 | t_1, t_2) = (lambda_1 * unigram) + (lambda_2 * bigram) + (lambda_3 8 trigram)
-    private static double lambda_1;
-    private static double lambda_2;
-    private static double lambda_3;
-    private static HashMap<Tag, HashMap<Tag, HashMap<Tag, Double>>> transitionProbability = new HashMap<Tag, HashMap<Tag, HashMap<Tag, Double>>>();
+    // P(t_3 | t_2, t_1) = (lambda1 * unigram) + (lambda2 * bigram) + (lambda3 * trigram)
+    private static double lambda1;
+    private static double lambda2;
+    private static double lambda3;
 
     private static Model model;
 
-    private static Integer tokenCount;
-    
     static long startTime;
     static long endTime;
 
@@ -53,7 +53,9 @@ public class build_tagger {
         printTimer();
         train();
         printTimer();
-        develop();
+        createModel();
+        printTimer();
+        test();
         printTimer();
         saveModel();
         printTimer();
@@ -96,6 +98,7 @@ public class build_tagger {
                     String tagString = tuple.substring(split + 1);
                     tag = new Tag(tagString);
                     
+                    incrementCount(wordCount, word);
                     incrementCount(lexicalCount, tag, word);
                     
                     incrementCount(unigramCount, tag);
@@ -115,20 +118,25 @@ public class build_tagger {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private static void createModel() {
+        typeCount = 0;
+        tokenCount = 0;
+        for (Integer value: wordCount.values()) {
+            typeCount += 1;
+            tokenCount += value;
+        }
         calculateNgrams();
+        calculateTransitionProbabilities();
+        model = new Model(wordCount, unigramCount, lexicalCount, unigram, bigram, trigram, lambda1, lambda2, lambda3);
     }
 
     private static void calculateNgrams() {
         if (debug)        
-            System.out.println("n-grams are calculating...");
-        // Calculate Unigrams
-        tokenCount = 0;
-        for (Entry<Tag, Integer> entry: unigramCount.entrySet()) {
-            Tag tag = entry.getKey();
-            Integer value = entry.getValue();
-            tokenCount += value;
-        }
+            System.out.println("calculating n-grams...");
 
+        // Calculate unigrams
         for (Entry<Tag, Integer> entry: unigramCount.entrySet()) {
             Tag tag = entry.getKey();
             Double value = (double) entry.getValue().intValue();
@@ -144,7 +152,7 @@ public class build_tagger {
             for (Entry<Tag, Integer> entry2: map1.entrySet()) {
                 Tag tag2 = entry2.getKey();
                 Double value = (double) entry2.getValue().intValue();
-                bigram.get(tag1).put(tag2, value / unigramCount.get(tag1));
+                bigram.get(tag1).put(tag2, value / unigramCount.get(tag2));
             }
         }
 
@@ -162,24 +170,55 @@ public class build_tagger {
                 for (Entry<Tag, Integer> entry3: map2.entrySet()) {
                     Tag tag3 = entry3.getKey();
                     Double value = (double) entry3.getValue().intValue();
-                    trigram.get(tag1).get(tag2).put(tag3, value / bigramCount.get(tag1).get(tag2));
+                    trigram.get(tag1).get(tag2).put(tag3, value / bigramCount.get(tag2).get(tag3));
                 }
             }
         }
     }
 
-    private static void develop() {
+    private static void calculateTransitionProbabilities() {
+        if (debug)
+            System.out.println("calculating transition probabilities...");
+
+        lambda1 = 0.0;
+        lambda2 = 0.0;
+        lambda3 = 0.0;
+
+        // Calculate lambdas
+        for (Entry<Tag, HashMap<Tag, HashMap<Tag, Double>>> entry1: trigram.entrySet()) {
+            Tag tag1 = entry1.getKey();
+            HashMap<Tag, HashMap<Tag, Double>> map1 = entry1.getValue();
+            for (Entry<Tag, HashMap<Tag, Double>> entry2: map1.entrySet()) {
+                Tag tag2 = entry2.getKey();
+                HashMap<Tag, Double> map2 = entry2.getValue();
+                for (Entry<Tag, Double> entry3: map2.entrySet()) {
+                    Tag tag3 = entry3.getKey();
+                    double val1 = (unigramCount.get(tag3) - 0.999) / (tokenCount - 0.999);
+                    double val2 = (bigramCount.get(tag2).get(tag3) - 0.999) / (unigramCount.get(tag2) - 0.999);
+                    double val3 = (trigramCount.get(tag1).get(tag2).get(tag3) - 0.999) / (bigramCount.get(tag1).get(tag2) - 0.999);
+                    
+                    if (val1 > val2 && val1 > val3) 
+                        lambda1 += trigramCount.get(tag1).get(tag2).get(tag3);
+                    else if  (val2 > val3) 
+                        lambda2 += trigramCount.get(tag1).get(tag2).get(tag3);
+                    else
+                        lambda3 += trigramCount.get(tag1).get(tag2).get(tag3);
+                }
+            }
+        }
+        
+        // Normalize lambdas
+        double lambdaSum = lambda1 + lambda2 + lambda3;
+        lambda1 = lambda1 / lambdaSum;
+        lambda2 = lambda2 / lambdaSum;
+        lambda3 = lambda3 / lambdaSum;
+    }
+
+    private static void test() {
         try {
             if (debug)
-                System.out.println("reading the development file: " + developmentFile);
+                System.out.println("reading the test file: " + developmentFile);
             BufferedReader reader = new BufferedReader(new FileReader(developmentFile));
-
-            if (debug)
-                System.out.println("calculating emission and transition probabilities");
-
-            // TODO: Calculate lambda values        
-            // TODO: Calculate emissionProbability
-            // TODO: Calculate transitionProbability
 
             reader.close();
         } catch (IOException e) {
@@ -188,10 +227,6 @@ public class build_tagger {
     }
 
     private static void saveModel() {
-        if (debug)        
-            System.out.println("creating the model...");
-        model = new Model(transitionProbability, emissionProbability);
-        
         if (debug)        
             System.out.println("saving the model...");
         // TODO: Save the model
