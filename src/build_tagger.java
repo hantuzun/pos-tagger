@@ -15,12 +15,11 @@ public class build_tagger {
     private static Boolean debug = false;
 
     // P(w_3 | t_3) = f(w_3, t_3) / f(t_3)
-    private static HashMap<Tag, Integer> tagCount = new HashMap<Tag, Integer>();
     private static HashMap<Tag, HashMap<String, Integer>> lexicalCount = new HashMap<Tag, HashMap<String, Integer>>();
     private static HashMap<Tag, HashMap<String, Double>> emissionProbability = new HashMap<Tag, HashMap<String, Double>>();
 
     // P'(t_3) = f(t_3) / V  
-    private static HashSet<String> vocabulary = new HashSet<String>();
+    private static HashMap<Tag, Integer> unigramCount = new HashMap<Tag, Integer>();
     private static HashMap<Tag, Double> unigram = new HashMap<Tag, Double>();  
     
     // P'(t_3 | t_2) = f(t_3 | t_2) / f(t_2)
@@ -38,6 +37,8 @@ public class build_tagger {
     private static HashMap<Tag, HashMap<Tag, HashMap<Tag, Double>>> transitionProbability = new HashMap<Tag, HashMap<Tag, HashMap<Tag, Double>>>();
 
     private static Model model;
+
+    private static Integer tokenCount;
     
     static long startTime;
     static long endTime;
@@ -83,9 +84,12 @@ public class build_tagger {
             
             String line;
             while ((line = reader.readLine()) != null) {
-                Tag tagPrev = new Tag("<t_(0)>");
-                Tag tagPrevPrev = new Tag("<t_(-1)>");
                 Tag tag = new Tag();
+                Tag tagPrev = new Tag("<t_(0)>");
+                incrementCount(unigramCount, tagPrev);
+                Tag tagPrevPrev = new Tag("<t_(-1)>");
+                incrementCount(unigramCount, tagPrevPrev);
+                incrementCount(bigramCount, tagPrevPrev, tagPrev);
                 for (String tuple : line.split(" ")) {
                     int split = tuple.lastIndexOf('/');
                     String word = tuple.substring(0, split);
@@ -94,7 +98,7 @@ public class build_tagger {
                     
                     incrementCount(lexicalCount, tag, word);
                     
-                    incrementCount(tagCount, tag);
+                    incrementCount(unigramCount, tag);
                     incrementCount(bigramCount, tagPrev, tag);
                     incrementCount(trigramCount, tagPrevPrev, tagPrev, tag);
                     
@@ -102,22 +106,66 @@ public class build_tagger {
                     tagPrev = tag;
                 }
                 Tag tagEnd = new Tag("<t_(N+1)>");
-                incrementCount(bigramCount, tagEnd, tag);
-                incrementCount(trigramCount, tagEnd, tag, tagPrev);
-            }
-
-            if (debug) {
-                System.out.println("distinct NN count: " + lexicalCount.get(new Tag("NN")).size());
+                incrementCount(unigramCount, tagEnd);
+                incrementCount(bigramCount, tag, tagEnd);
+                incrementCount(trigramCount, tagPrevPrev, tag, tagEnd);
             }
 
             reader.close();
         } catch (IOException e) {
             e.printStackTrace();
         }
+        calculateNgrams();
+    }
 
+    private static void calculateNgrams() {
         if (debug)        
             System.out.println("n-grams are calculating...");
-        // TODO: Calculate n-grams
+        // Calculate Unigrams
+        tokenCount = 0;
+        for (Entry<Tag, Integer> entry: unigramCount.entrySet()) {
+            Tag tag = entry.getKey();
+            Integer value = entry.getValue();
+            tokenCount += value;
+        }
+
+        for (Entry<Tag, Integer> entry: unigramCount.entrySet()) {
+            Tag tag = entry.getKey();
+            Double value = (double) entry.getValue().intValue();
+            unigram.put(tag, value / tokenCount);
+        }
+
+        // Calculate bigrams
+        for (Entry<Tag, HashMap<Tag, Integer>> entry1: bigramCount.entrySet()) {
+            Tag tag1 = entry1.getKey();
+            HashMap<Tag, Integer> map1 = entry1.getValue();
+            if (!bigram.containsKey(tag1))
+                bigram.put(tag1, new HashMap<Tag, Double>());
+            for (Entry<Tag, Integer> entry2: map1.entrySet()) {
+                Tag tag2 = entry2.getKey();
+                Double value = (double) entry2.getValue().intValue();
+                bigram.get(tag1).put(tag2, value / unigramCount.get(tag1));
+            }
+        }
+
+        // Calculate trigrams
+        for (Entry<Tag, HashMap<Tag, HashMap<Tag, Integer>>> entry1: trigramCount.entrySet()) {
+            Tag tag1 = entry1.getKey();
+            HashMap<Tag, HashMap<Tag, Integer>> map1 = entry1.getValue();
+            if (!trigram.containsKey(tag1))
+                trigram.put(tag1, new HashMap<Tag, HashMap<Tag, Double>>());
+            for (Entry<Tag, HashMap<Tag, Integer>> entry2: map1.entrySet()) {
+                Tag tag2 = entry2.getKey();
+                HashMap<Tag, Integer> map2 = entry2.getValue();
+                if (!trigram.get(tag1).containsKey(tag2))
+                    trigram.get(tag1).put(tag2, new HashMap<Tag, Double>());
+                for (Entry<Tag, Integer> entry3: map2.entrySet()) {
+                    Tag tag3 = entry3.getKey();
+                    Double value = (double) entry3.getValue().intValue();
+                    trigram.get(tag1).get(tag2).put(tag3, value / bigramCount.get(tag1).get(tag2));
+                }
+            }
+        }
     }
 
     private static void develop() {
