@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map.Entry;
+import java.util.Scanner;
 import java.util.Set;
 
 public class build_tagger {
@@ -215,6 +216,10 @@ public class build_tagger {
     }
 
     private static void test() {
+        String line;
+        while ((line = new Scanner(System.in).nextLine()) != null)
+            model.tag(line.split(" "));
+        
         try {
             if (debug)
                 System.out.println("reading the test file: " + developmentFile);

@@ -7,8 +7,10 @@ public final class Tag {
         "PRP", "PRP$", "RB", "RBR", "RBS", "RP", "SYM", "TO", "UH", "VB", "VBD", "VBG", "VBN", "VBP", "VBZ", 
         "WDT", "WP", "WP$", "WRB", "$", "#", "``", "''", "-LRB-", "-RRB-", ",", ".", ":", "<t_(N+1)>"));
 
-    private String tag;
+
     public static final int count = tags.size();
+
+    private String tag;
 
     public Tag() {}
 
