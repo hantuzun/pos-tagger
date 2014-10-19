@@ -1,7 +1,9 @@
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -45,13 +47,12 @@ public class build_tagger {
 
     /**
      * build_tagger.java
+     * usage: java build_tagger <sents.train> <sents.devt> <model_file>
      */
     public static void main(String[] args) {
-        startTime = System.currentTimeMillis();
         validateArguments(args);
         train();
         createModel();
-        test();
         saveModel();
         System.exit(0);
     }
@@ -71,37 +72,39 @@ public class build_tagger {
         try {            
             BufferedReader reader = new BufferedReader(new FileReader(trainFile));
             
-            String line;
-            while ((line = reader.readLine()) != null) {
-                Tag tag = new Tag();
-                Tag tagPrev = new Tag("<0>");
-                incrementCount(unigramCount, tagPrev);
-                Tag tagPrevPrev = new Tag("<-1>");
-                incrementCount(unigramCount, tagPrevPrev);
-                incrementCount(bigramCount, tagPrevPrev, tagPrev);
-                for (String tuple : line.split(" ")) {
-                    int split = tuple.lastIndexOf('/');
-                    String word = tuple.substring(0, split);
-                    String tagString = tuple.substring(split + 1);
-                    tag = new Tag(tagString);
-                    
-                    incrementCount(wordCount, word);
-                    incrementCount(lexicalCount, tag, word);
-                    
-                    incrementCount(unigramCount, tag);
-                    incrementCount(bigramCount, tagPrev, tag);
-                    incrementCount(trigramCount, tagPrevPrev, tagPrev, tag);
-                    
-                    tagPrevPrev = tagPrev;
-                    tagPrev = tag;
+            try {            
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    Tag tag = new Tag();
+                    Tag tagPrev = new Tag("<0>");
+                    incrementCount(unigramCount, tagPrev);
+                    Tag tagPrevPrev = new Tag("<-1>");
+                    incrementCount(unigramCount, tagPrevPrev);
+                    incrementCount(bigramCount, tagPrevPrev, tagPrev);
+                    for (String tuple : line.split(" ")) {
+                        int split = tuple.lastIndexOf('/');
+                        String word = tuple.substring(0, split);
+                        String tagString = tuple.substring(split + 1);
+                        tag = new Tag(tagString);
+                        
+                        incrementCount(wordCount, word);
+                        incrementCount(lexicalCount, tag, word);
+                        
+                        incrementCount(unigramCount, tag);
+                        incrementCount(bigramCount, tagPrev, tag);
+                        incrementCount(trigramCount, tagPrevPrev, tagPrev, tag);
+                        
+                        tagPrevPrev = tagPrev;
+                        tagPrev = tag;
+                    }
+                    Tag tagEnd = new Tag("<N+1>");
+                    incrementCount(unigramCount, tagEnd);
+                    incrementCount(bigramCount, tag, tagEnd);
+                    incrementCount(trigramCount, tagPrevPrev, tag, tagEnd);
                 }
-                Tag tagEnd = new Tag("<N+1>");
-                incrementCount(unigramCount, tagEnd);
-                incrementCount(bigramCount, tag, tagEnd);
-                incrementCount(trigramCount, tagPrevPrev, tag, tagEnd);
-            }
-
-            reader.close();
+            } finally {
+                reader.close();
+            }                
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -253,30 +256,19 @@ public class build_tagger {
         model = new Model(wordCount, unigramCount, lexicalCount, unigram, bigram, trigram, lambda1, lambda2, lambda3);
     }
 
-    private static void test() {
-        Scanner scan = new Scanner(System.in);
-        String line;
-        Tag[] tags;
-        do {
-            System.out.print("\n>> ");
-            words = scan.nextLine().split(" ");
-            tags = model.tag(words);
-            for (Tag tag: tags) {
-                System.out.print(tag + " ");
-            }
-        } while (line != null);
-
+    private static void saveModel() {
         try {
-            BufferedReader reader = new BufferedReader(new FileReader(developmentFile));
-
-            reader.close();
+            FileOutputStream fileStream = new FileOutputStream(modelFile);
+            ObjectOutputStream objectStream = new ObjectOutputStream(fileStream);
+            try {
+                objectStream.writeObject(model); 
+            } finally {
+                objectStream.close();
+                fileStream.close();
+            }
         } catch (IOException e) {
             e.printStackTrace();
-        }    
-    }
-
-    private static void saveModel() {
-        // TODO: Save the model
+        }
     }
 
     private static void incrementCount(HashMap<String, Integer> count, String key) {
