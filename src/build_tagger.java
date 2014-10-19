@@ -16,9 +16,9 @@ public class build_tagger {
     private static File developmentFile;
     private static File modelFile;
 
-    private static int typeCount;
-    private static int tokenCount;
     private static HashMap<String, Integer> wordCount = new HashMap<String, Integer>();
+
+    private static HashMap<Tag, Integer> singeltonCount = new HashMap<Tag, Integer>();
 
     // P(w_3 | t_3) = f(w_3, t_3) / f(t_3)
     private static HashMap<Tag, HashMap<String, Integer>> lexicalCount = new HashMap<Tag, HashMap<String, Integer>>();
@@ -40,10 +40,10 @@ public class build_tagger {
     private static double lambda2;
     private static double lambda3;
 
+    private static int typeCount;
+    private static int tokenCount;
+    
     private static Model model;
-
-    static long startTime;
-    static long endTime;
 
     /**
      * build_tagger.java
@@ -53,7 +53,7 @@ public class build_tagger {
         validateArguments(args);
         train();
         createModel();
-        saveModel();
+        saveModel(args);
         System.exit(0);
     }
 
@@ -111,12 +111,6 @@ public class build_tagger {
     }
 
     private static void calculateNgrams() {
-        for (Entry<Tag, Integer> entry: unigramCount.entrySet()) {
-            Tag tag = entry.getKey();
-            Double value = (double) entry.getValue().intValue();
-            unigram.put(tag, value / tokenCount);
-        }
-
         for (String str1: new Tag().getTags()) {
             Tag tag1 = new Tag(str1);
             
@@ -244,27 +238,47 @@ public class build_tagger {
         lambda3 = lambda3 / lambdaSum; 
     }
 
-    private static void createModel() {
+    private static void calculateSingeltonCount() {
+        for (Entry<Tag, HashMap<String, Integer>> entry: lexicalCount.entrySet()) {
+            Tag tag = entry.getKey();
+            HashMap<String, Integer> wordMap = entry.getValue();
+            int singelton = 0;
+            for (Integer count: wordMap.values())
+                if (count == 1)
+                    singelton++;
+            singeltonCount.put(tag, singelton);
+        }   
+    }
+
+    private static void calculateTypeandToken() {
         typeCount = 0;
         tokenCount = 0;
         for (Integer value: wordCount.values()) {
             typeCount += 1;
             tokenCount += value;
         }
-        calculateNgrams();
-        calculateLambdas();
-        model = new Model(wordCount, unigramCount, lexicalCount, unigram, bigram, trigram, lambda1, lambda2, lambda3);
     }
 
-    private static void saveModel() {
+    private static void createModel() {
+        calculateTypeandToken();
+        calculateSingeltonCount();
+        calculateNgrams();
+        calculateLambdas();
+
+        model = new Model(wordCount, unigramCount, lexicalCount, singeltonCount, unigram, bigram, trigram, lambda1, lambda2, lambda3, typeCount, tokenCount);
+    }
+
+    private static void saveModel(String[] args) {
         try {
-            FileOutputStream fileStream = new FileOutputStream(modelFile);
+            FileOutputStream fileStream = new FileOutputStream(args[2]);
             ObjectOutputStream objectStream = new ObjectOutputStream(fileStream);
             try {
                 objectStream.writeObject(model); 
             } finally {
-                objectStream.close();
-                fileStream.close();
+                if (objectStream != null) { 
+                    objectStream.close();
+                    fileStream.close();
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();

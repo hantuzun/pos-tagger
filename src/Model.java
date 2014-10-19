@@ -1,3 +1,6 @@
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -6,67 +9,47 @@ import java.util.LinkedList;
 import java.util.Map.Entry;
 
 public class Model implements Serializable {
-    private static final HashSet<String> tagStrings = new HashSet<String>(Arrays.asList("CC", 
-    "CD", "DT", "EX", "FW", "IN", "JJ", "JJR", "JJS", "LS", "MD", "NN", "NNS", "NNP", "NNPS", "PDT", "POS",
-    "PRP", "PRP$", "RB", "RBR", "RBS", "RP", "SYM", "TO", "UH", "VB", "VBD", "VBG", "VBN", "VBP", "VBZ", 
-    "WDT", "WP", "WP$", "WRB", "$", "#", "``", "''", "-LRB-", "-RRB-", ",", ".", ":"));
-	private static final Tag[] tagArray = new Tag[tagStrings.size()];
-    private static final HashSet<Tag> tags = new HashSet<Tag>();
+	private static final long serialVersionUID = 78987654356789L;
 
-   	private HashMap<Tag, Integer> singeltonCount = new HashMap<Tag, Integer>();
+	private static final Tag[] tagsArray = {new Tag("CC"), new Tag("CD"), new Tag("DT"), new Tag("EX"), new Tag("FW"), 
+		new Tag("IN"), new Tag("JJ"), new Tag("JJR"), new Tag("JJS"), new Tag("LS"), new Tag("MD"), new Tag("NN"), 
+		new Tag("NNS"), new Tag("NNP"), new Tag("NNPS"), new Tag("PDT"), new Tag("POS"), new Tag("PRP"), new Tag("PRP$"), 
+		new Tag("RB"), new Tag("RBR"), new Tag("RBS"), new Tag("RP"), new Tag("SYM"), new Tag("TO"), new Tag("UH"), 
+		new Tag("VB"), new Tag("VBD"), new Tag("VBG"), new Tag("VBN"), new Tag("VBP"), new Tag("VBZ"), new Tag("WDT"), 
+		new Tag("WP"), new Tag("WP$"), new Tag("WRB"), new Tag("$"), new Tag("#"), new Tag("``"), new Tag("''"), 
+		new Tag("-LRB-"), new Tag("-RRB-"), new Tag(","), new Tag("."), new Tag(":")};
 
 	private HashMap<String, Integer> wordCount = new HashMap<String, Integer>();
 	private HashMap<Tag, Integer> tagCount = new HashMap<Tag, Integer>();
 	private HashMap<Tag, HashMap<String, Integer>> lexicalCount = new HashMap<Tag, HashMap<String, Integer>>();
+   	private HashMap<Tag, Integer> singeltonCount = new HashMap<Tag, Integer>();
     private HashMap<Tag, Double> unigram = new HashMap<Tag, Double>();  
     private HashMap<Tag, HashMap<Tag, Double>> bigram = new  HashMap<Tag, HashMap<Tag, Double>>();
     private HashMap<Tag, HashMap<Tag, HashMap<Tag, Double>>> trigram = new HashMap<Tag, HashMap<Tag, HashMap<Tag, Double>>>();
-    private int typeCount;
-    private int tokenCount;
     private double lambda1;
     private double lambda2;
     private double lambda3;
+    private int typeCount;
+    private int tokenCount;
 
 	public Model(HashMap<String, Integer> wordCount, HashMap<Tag, Integer> tagCount, 
-		HashMap<Tag, HashMap<String, Integer>> lexicalCount, HashMap<Tag, Double> unigram,
-		HashMap<Tag, HashMap<Tag, Double>> bigram, HashMap<Tag, HashMap<Tag, HashMap<Tag, Double>>> trigram,
-		double lambda1, double lambda2, double lambda3) {
+		HashMap<Tag, HashMap<String, Integer>> lexicalCount, HashMap<Tag, Integer> singeltonCount, 
+		HashMap<Tag, Double> unigram, HashMap<Tag, HashMap<Tag, Double>> bigram, 
+		HashMap<Tag, HashMap<Tag, HashMap<Tag, Double>>> trigram,
+		double lambda1, double lambda2, double lambda3, int typeCount, int tokenCount) {
 		
 		this.wordCount = wordCount;
 		this.tagCount = tagCount;
 		this.lexicalCount = lexicalCount;
+		this.singeltonCount = singeltonCount;
 		this.unigram = unigram;
 		this.bigram = bigram;
 		this.trigram = trigram;
 		this.lambda1 = lambda1;
 		this.lambda2 = lambda2;
 		this.lambda3 = lambda3;
-
-		typeCount = 0;
-        tokenCount = 0;    
-        for (Integer value: wordCount.values()) {
-            typeCount += 1;
-            tokenCount += value;
-        }
-
-        for (Entry<Tag, HashMap<String, Integer>> entry: lexicalCount.entrySet()) {
-        	Tag tag = entry.getKey();
-        	HashMap<String, Integer> wordMap = entry.getValue();
-        	int singelton = 0;
-        	for (Integer count: wordMap.values())
-				if (count == 1)
-					singelton++;
-        	singeltonCount.put(tag, singelton);
-		}	
-
-		for (String tagString: tagStrings) {
-			tags.add(new Tag(tagString));
-		}
-
-		int index = 0;
-        for (Tag tag: tags) {
-        	tagArray[index++] = tag;
-        }
+		this.typeCount = typeCount;
+        this.tokenCount = tokenCount;
 	}
 
 	public double emissionProbability(Tag tag, String word) {
@@ -89,27 +72,27 @@ public class Model implements Serializable {
 	}
 
 	public Tag[] tag(String[] words) {
-		int len = words.length;
-		Double[][] viberti = new Double[len][tags.size()];
-		Tag[][] backTrace = new Tag[len - 1][tags.size()];
 
-		for (int i = 0; i < tags.size(); i++) {
-			viberti[0][i] = Math.log(transitionProbability(new Tag("<-1>"), new Tag("<0>"), tagArray[i]));
-			viberti[0][i] += Math.log(emissionProbability(tagArray[i], words[0]));
+		Double[][] viberti = new Double[words.length][tagsArray.length];
+		Tag[][] backTrace = new Tag[words.length - 1][tagsArray.length];
+
+		for (int i = 0; i < tagsArray.length; i++) {
+			viberti[0][i] = Math.log(transitionProbability(new Tag("<-1>"), new Tag("<0>"), tagsArray[i]));
+			viberti[0][i] += Math.log(emissionProbability(tagsArray[i], words[0]));
 		}
 
 		// init
-		if (len > 1) {
-			for (int i = 0; i < tags.size(); i++) {
+		if (words.length > 1) {
+			for (int i = 0; i < tagsArray.length; i++) {
 				double max = - Double.MAX_VALUE;
 				Tag backPointer = new Tag();
-				for (int j = 0; j < tags.size(); j++) {
-					double val = Math.log(transitionProbability(new Tag("<0>"), tagArray[j], tagArray[i]));
-					val += Math.log(emissionProbability(tagArray[i], words[1]));
+				for (int j = 0; j < tagsArray.length; j++) {
+					double val = Math.log(transitionProbability(new Tag("<0>"), tagsArray[j], tagsArray[i]));
+					val += Math.log(emissionProbability(tagsArray[i], words[1]));
 					val += viberti[0][j];
 					if (val > max) {
 						max = val;
-						backPointer = tagArray[j];
+						backPointer = tagsArray[j];
 					}
 				}
 				viberti[1][i] = max;
@@ -118,19 +101,19 @@ public class Model implements Serializable {
 		}
 
 		// iter
-		for (int iter = 2; iter < len; iter++) {
-			for (int i = 0; i < tags.size(); i++) {
+		for (int iter = 2; iter < words.length; iter++) {
+			for (int i = 0; i < tagsArray.length; i++) {
 				double max = - Double.MAX_VALUE;
 				Tag backPointer = new Tag();
-				for (int j = 0; j < tags.size(); j++) {
-					for (int k = 0; k < tags.size(); k++) {
-						double val = Math.log(transitionProbability(tagArray[k], tagArray[j], tagArray[i]));
-						val += Math.log(emissionProbability(tagArray[i], words[iter]));
+				for (int j = 0; j < tagsArray.length; j++) {
+					for (int k = 0; k < tagsArray.length; k++) {
+						double val = Math.log(transitionProbability(tagsArray[k], tagsArray[j], tagsArray[i]));
+						val += Math.log(emissionProbability(tagsArray[i], words[iter]));
 						val += viberti[iter - 1][j];
 						val += viberti[iter - 2][k];
 						if (val > max) {
 							max = val;
-							backPointer = tagArray[j];
+							backPointer = tagsArray[j];
 						}
 					}
 				}
@@ -142,27 +125,32 @@ public class Model implements Serializable {
 		// terminate
 		double max = - Double.MAX_VALUE;
 		Tag backPointer = new Tag();
-		for (int i = 0; i < tags.size(); i++) {
-
-			double val = Math.log(bigram.get(tagArray[i]).get(new Tag("<N+1>"))); 
-			val += viberti[len - 1][i];
+		for (int i = 0; i < tagsArray.length; i++) {
+			double val = Math.log(bigram.get(tagsArray[i]).get(new Tag("<N+1>"))); 
+			val += viberti[words.length - 1][i];
 			if (val > max) {
 				max = val;
-				backPointer = tagArray[i];
+				backPointer = tagsArray[i];
 			}
-		}		
+		}
 
 		// backtrack
-		Tag[] path = new Tag[len];
-		int p = 0;
-		path[len - 1] = backPointer;
-		for (int i = len - 2; i >= 0; i--) {
-			int index = java.util.Arrays.asList(tagArray).indexOf(backPointer);
+		Tag[] path = new Tag[words.length];
+		path[words.length - 1] = backPointer;
+		for (int i = words.length - 2; i >= 0; i--) {
+			int index = java.util.Arrays.asList(tagsArray).indexOf(backPointer);
 			backPointer =  backTrace[i][index];
-
 			path[i] = backPointer;
 		}
 
 		return path;
 	}
+
+   	private void readObject(ObjectInputStream inputStream) throws ClassNotFoundException, IOException {
+     	inputStream.defaultReadObject();
+  	}
+
+    private void writeObject(ObjectOutputStream outputStream) throws IOException {
+      	outputStream.defaultWriteObject();
+    }
 }
