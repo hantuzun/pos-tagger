@@ -6,11 +6,13 @@ import java.util.LinkedList;
 import java.util.Map.Entry;
 
 public class Model implements Serializable {
-    private static final HashSet<String> tagStrings = new HashSet<String>(Arrays.asList("<t_(-1)>", "<t_(0)>", "CC", 
+    private static final HashSet<String> tagStrings = new HashSet<String>(Arrays.asList("CC", 
     "CD", "DT", "EX", "FW", "IN", "JJ", "JJR", "JJS", "LS", "MD", "NN", "NNS", "NNP", "NNPS", "PDT", "POS",
     "PRP", "PRP$", "RB", "RBR", "RBS", "RP", "SYM", "TO", "UH", "VB", "VBD", "VBG", "VBN", "VBP", "VBZ", 
-    "WDT", "WP", "WP$", "WRB", "$", "#", "``", "''", "-LRB-", "-RRB-", ",", ".", ":", "<t_(N+1)>"));
+    "WDT", "WP", "WP$", "WRB", "$", "#", "``", "''", "-LRB-", "-RRB-", ",", ".", ":"));
+	private static final Tag[] tagArray = new Tag[tagStrings.size()];
     private static final HashSet<Tag> tags = new HashSet<Tag>();
+
    	private HashMap<Tag, Integer> singeltonCount = new HashMap<Tag, Integer>();
 
 	private HashMap<String, Integer> wordCount = new HashMap<String, Integer>();
@@ -60,13 +62,19 @@ public class Model implements Serializable {
 		for (String tagString: tagStrings) {
 			tags.add(new Tag(tagString));
 		}
+
+		int index = 0;
+        for (Tag tag: tags) {
+        	tagArray[index++] = tag;
+        }
 	}
 
 	public double emissionProbability(Tag tag, String word) {
 		int addOneNominator = (wordCount.get(word) != null) ? (wordCount.get(word) + 1) : 1;
 		int addOneDenominator = tokenCount + typeCount;
 		double addOneSmooth = (double) addOneNominator / addOneDenominator;
-		double nominator = ((lexicalCount.get(tag) == null) ? 0 : (lexicalCount.get(tag).get(word) == null) ? 0 : lexicalCount.get(tag).get(word).intValue()) + addOneSmooth * ((singeltonCount.get(tag) == null) ? 0 : singeltonCount.get(tag));
+		double l = ((singeltonCount.get(tag) == null) ? 0 : singeltonCount.get(tag)) + 0.00000000000000000000000000001;
+		double nominator = ((lexicalCount.get(tag) == null) ? 0 : (lexicalCount.get(tag).get(word) == null) ? 0 : lexicalCount.get(tag).get(word).intValue()) + addOneSmooth * l;
 		int denominator = (tagCount.get(tag) == null) ? 0 : tagCount.get(tag) + ((singeltonCount.get(tag) == null) ? 0 : singeltonCount.get(tag));
 		
 		return (double) nominator / denominator;
@@ -82,64 +90,78 @@ public class Model implements Serializable {
 
 	public void tag(String[] words) {
 		int len = words.length;
-		HashMap<Tag, Double>[] wordToTag = new HashMap[len];
-		HashMap<Tag, Tag>[] backtrace = new HashMap[len];
-		
-		// Initialization
-		if (len >= 1) {
-			wordToTag[0] = new HashMap<Tag, Double>();
-			for (Tag tag: tags) {
-				wordToTag[0].put(tag, transitionProbability(new Tag("<t_(-1)>"), new Tag("<t_(0)>"), tag) * emissionProbability(tag, words[0]));
-			}	
+		Double[][] viberti = new Double[len][tags.size()];
+		Tag[][] backTrace = new Tag[len - 1][tags.size()];
+
+		for (int i = 0; i < tags.size(); i++) {
+			viberti[0][i] = transitionProbability(new Tag("<-1>"), new Tag("<0>"), tagArray[i]) * emissionProbability(tagArray[i], words[0]);
 		}
 
-		if (len >= 2) {
-			wordToTag[1] = new HashMap<Tag, Double>();
-			backtrace[0] = new HashMap<Tag, Tag>();
-			for (Tag tag: tags) {
-				double max = Double.MIN_VALUE;
+		// init
+		if (len > 1) {
+			for (int i = 0; i < tags.size(); i++) {
+				double max = - Double.MAX_VALUE;
 				Tag backPointer = new Tag();
-				for (Tag tagPrev: tags) {
-					double val = transitionProbability(new Tag("<t_(0)>"), tagPrev, tag) * emissionProbability(tag, words[0]) * wordToTag[0].get(tagPrev);
+				for (int j = 0; j < tags.size(); j++) {
+					double val = transitionProbability(new Tag("<0>"), tagArray[j], tagArray[i]) * emissionProbability(tagArray[i], words[1]);
+					val *= viberti[0][j];
 					if (val > max) {
 						max = val;
-						backPointer = tagPrev;
+						backPointer = tagArray[j];
 					}
 				}
-				wordToTag[1].put(tag, max);
-				backtrace[0].put(tag, backPointer);
-			}	
-		}
-
-		// Iteration
-		// TODO: 	add  emissionProbability(tag, words[0]) for iteration
-		// double val = transitionProbability(tagPrevPrev, tagPrev, tag) * wordToTag[i - 1].get(tagPrev) * wordToTag[i - 2].get(tagPrevPrev);
-				
-
-		// Termination
-		if (len >= 2) {
-			int i = len;
-			backtrace[i - 1] = new HashMap<Tag, Tag>();
-			Tag tag = new Tag("<t_(N+1)>");
-			Tag backPointer = new Tag();
-			double max = Double.MIN_VALUE;
-			for (Tag tagPrev: tags) {
-				for (Tag tagPrevPrev: tags) {
-					double val = transitionProbability(tagPrevPrev, tagPrev, tag) * wordToTag[i - 1].get(tagPrev) * wordToTag[i - 2].get(tagPrevPrev);
-					if (val > max) {
-						max = val;
-						backPointer = tagPrev;
-					}
-				}
+				viberti[1][i] = max;
+				backTrace[0][i] = backPointer;
 			}
-			backtrace[len - 1].put(tag, backPointer);
 		}
 
-		// Backtracking
-		Tag backPointer = new Tag("<t_(N+1)>");
-		for (int i = len - 1; i >= 0; i--) {
-			backPointer = backtrace[i].get(backPointer);
-			System.out.println(backPointer);
+		// iter
+		for (int iter = 2; iter < len; iter++) {
+			for (int i = 0; i < tags.size(); i++) {
+				double max = - Double.MAX_VALUE;
+				Tag backPointer = new Tag();
+				for (int j = 0; j < tags.size(); j++) {
+					for (int k = 0; k < tags.size(); k++) {
+						double val = transitionProbability(tagArray[k], tagArray[j], tagArray[i]) * emissionProbability(tagArray[i], words[iter]);
+						val *= viberti[iter - 1][j] * viberti[iter - 2][k];
+						if (val > max) {
+							max = val;
+							backPointer = tagArray[j];
+						}
+					}
+				}
+				viberti[iter][i] = max;
+				backTrace[iter - 1][i] = backPointer;
+			}
+		}
+
+		// terminate
+		double max = - Double.MAX_VALUE;
+		Tag backPointer = new Tag();
+		for (int i = 0; i < tags.size(); i++) {
+
+			double val = bigram.get(tagArray[i]).get(new Tag("<N+1>")); 
+			val *= viberti[len - 1][i];
+			if (val > max) {
+				max = val;
+				backPointer = tagArray[i];
+			}
+		}		
+
+		// backtrack
+
+		Tag[] path = new Tag[len];
+		int p = 0;
+		path[len - 1] = backPointer;
+		for (int i = len - 2; i >= 0; i--) {
+			int index = java.util.Arrays.asList(tagArray).indexOf(backPointer);
+			backPointer =  backTrace[i][index];
+
+			path[i] = backPointer;
+		}
+
+		for (int i = 0; i < len; i++) {
+			System.out.print(path[i] + " "); 
 		}
 	}
 }

@@ -13,7 +13,6 @@ public class build_tagger {
     private static File trainFile;
     private static File developmentFile;
     private static File modelFile;
-    private static Boolean debug = false;
 
     private static int typeCount;
     private static int tokenCount;
@@ -46,28 +45,18 @@ public class build_tagger {
 
     /**
      * build_tagger.java
-     * usage: java build_tagger <sents.train> <sents.devt> <model_file> [debug]
      */
     public static void main(String[] args) {
         startTime = System.currentTimeMillis();
         validateArguments(args);
-        printTimer();
         train();
-        printTimer();
         createModel();
-        printTimer();
         test();
-        printTimer();
         saveModel();
-        printTimer();
         System.exit(0);
     }
 
     private static void validateArguments(String[] args) {
-        if (args.length >= 4 && args[3].equalsIgnoreCase("debug")) {
-            debug = true;
-            System.out.println("debug mode has been enabled");
-        }
         if (args.length >= 3) {
             trainFile = new File(args[0]);
             developmentFile = new File(args[1]);
@@ -79,18 +68,15 @@ public class build_tagger {
     }
 
     private static void train() {
-        try {
-            if (debug)
-                System.out.println("reading the train file: " + trainFile);
-            
+        try {            
             BufferedReader reader = new BufferedReader(new FileReader(trainFile));
             
             String line;
             while ((line = reader.readLine()) != null) {
                 Tag tag = new Tag();
-                Tag tagPrev = new Tag("<t_(0)>");
+                Tag tagPrev = new Tag("<0>");
                 incrementCount(unigramCount, tagPrev);
-                Tag tagPrevPrev = new Tag("<t_(-1)>");
+                Tag tagPrevPrev = new Tag("<-1>");
                 incrementCount(unigramCount, tagPrevPrev);
                 incrementCount(bigramCount, tagPrevPrev, tagPrev);
                 for (String tuple : line.split(" ")) {
@@ -109,7 +95,7 @@ public class build_tagger {
                     tagPrevPrev = tagPrev;
                     tagPrev = tag;
                 }
-                Tag tagEnd = new Tag("<t_(N+1)>");
+                Tag tagEnd = new Tag("<N+1>");
                 incrementCount(unigramCount, tagEnd);
                 incrementCount(bigramCount, tag, tagEnd);
                 incrementCount(trigramCount, tagPrevPrev, tag, tagEnd);
@@ -121,66 +107,93 @@ public class build_tagger {
         }
     }
 
-    private static void createModel() {
-        typeCount = 0;
-        tokenCount = 0;
-        for (Integer value: wordCount.values()) {
-            typeCount += 1;
-            tokenCount += value;
-        }
-        calculateNgrams();
-        calculateTransitionProbabilities();
-        model = new Model(wordCount, unigramCount, lexicalCount, unigram, bigram, trigram, lambda1, lambda2, lambda3);
-    }
-
     private static void calculateNgrams() {
-        if (debug)        
-            System.out.println("calculating n-grams...");
-
-        // Calculate unigrams
         for (Entry<Tag, Integer> entry: unigramCount.entrySet()) {
             Tag tag = entry.getKey();
             Double value = (double) entry.getValue().intValue();
             unigram.put(tag, value / tokenCount);
         }
 
-        // Calculate bigrams
-        for (Entry<Tag, HashMap<Tag, Integer>> entry1: bigramCount.entrySet()) {
-            Tag tag1 = entry1.getKey();
-            HashMap<Tag, Integer> map1 = entry1.getValue();
-            if (!bigram.containsKey(tag1))
-                bigram.put(tag1, new HashMap<Tag, Double>());
-            for (Entry<Tag, Integer> entry2: map1.entrySet()) {
-                Tag tag2 = entry2.getKey();
-                Double value = (double) entry2.getValue().intValue();
-                bigram.get(tag1).put(tag2, value / unigramCount.get(tag2));
-            }
+        for (String str1: new Tag().getTags()) {
+                Tag tag1 = new Tag(str1);
+                
+                if (!unigramCount.containsKey(tag1)) {
+                    unigramCount.put(tag1, 0);
+                }
+
+                int nominator = unigramCount.get(tag1);
+                int denominator = tokenCount;
+                if (denominator != 0) {
+                    unigram.put(tag1, (double) nominator / denominator);
+                } else {
+                    unigram.put(tag1, 0.0);
+                }
         }
 
-        // Calculate trigrams
-        for (Entry<Tag, HashMap<Tag, HashMap<Tag, Integer>>> entry1: trigramCount.entrySet()) {
-            Tag tag1 = entry1.getKey();
-            HashMap<Tag, HashMap<Tag, Integer>> map1 = entry1.getValue();
-            if (!trigram.containsKey(tag1))
-                trigram.put(tag1, new HashMap<Tag, HashMap<Tag, Double>>());
-            for (Entry<Tag, HashMap<Tag, Integer>> entry2: map1.entrySet()) {
-                Tag tag2 = entry2.getKey();
-                HashMap<Tag, Integer> map2 = entry2.getValue();
-                if (!trigram.get(tag1).containsKey(tag2))
-                    trigram.get(tag1).put(tag2, new HashMap<Tag, Double>());
-                for (Entry<Tag, Integer> entry3: map2.entrySet()) {
-                    Tag tag3 = entry3.getKey();
-                    Double value = (double) entry3.getValue().intValue();
-                    trigram.get(tag1).get(tag2).put(tag3, value / bigramCount.get(tag2).get(tag3));
+
+        for (String str1: new Tag().getTags()) {
+            for (String str2: new Tag().getTags()) {
+                Tag tag1 = new Tag(str1);
+                Tag tag2 = new Tag(str2);
+
+                if (!bigramCount.containsKey(tag1)) {
+                    bigramCount.put(tag1, new HashMap<Tag, Integer>());
+                }
+                if (!bigramCount.get(tag1).containsKey(tag2)) {
+                    bigramCount.get(tag1).put(tag2, 0);
+                }
+                if (!bigram.containsKey(tag1)) {
+                    bigram.put(tag1, new HashMap<Tag, Double>());
+                }
+
+                int nominator = bigramCount.get(tag1).get(tag2);
+                int denominator = unigramCount.get(tag1);
+                if (denominator != 0) {
+                    bigram.get(tag1).put(tag2, (double) nominator / denominator);
+                } else {
+                    bigram.get(tag1).put(tag2, 0.0);
                 }
             }
         }
+
+        for (String str1: new Tag().getTags()) {
+            for (String str2: new Tag().getTags()) {
+                for (String str3: new Tag().getTags()) {
+                    Tag tag1 = new Tag(str1);
+                    Tag tag2 = new Tag(str2);
+                    Tag tag3 = new Tag(str3);
+
+                    if (!trigramCount.containsKey(tag1)) {
+                        trigramCount.put(tag1, new HashMap<Tag, HashMap<Tag, Integer>>());
+                    }
+                    if (!trigramCount.get(tag1).containsKey(tag2)) {
+                        trigramCount.get(tag1).put(tag2, new HashMap<Tag, Integer>());
+                    }
+                    if (!trigramCount.get(tag1).get(tag2).containsKey(tag3)) {
+                        trigramCount.get(tag1).get(tag2).put(tag3, 0);
+                    }
+                    if (!trigram.containsKey(tag1)) {
+                        trigram.put(tag1, new HashMap<Tag, HashMap<Tag, Double>>());
+                    }
+                    if (!trigram.get(tag1).containsKey(tag2)) {
+                        trigram.get(tag1).put(tag2, new HashMap<Tag, Double>());
+                    }
+
+                    int nominator = trigramCount.get(tag1).get(tag2).get(tag3);
+                    int denominator = bigramCount.get(tag1).get(tag2);
+                    if (denominator != 0) {
+                        trigram.get(tag1).get(tag2).put(tag3, (double) nominator / denominator);
+                    } else {
+                        trigram.get(tag1).get(tag2).put(tag3, 0.0);
+                    }
+                }
+            }
+        }
+
+
     }
 
-    private static void calculateTransitionProbabilities() {
-        if (debug)
-            System.out.println("calculating transition probabilities...");
-
+    private static void calculateLambdas() {
         lambda1 = 0.0;
         lambda2 = 0.0;
         lambda3 = 0.0;
@@ -194,9 +207,24 @@ public class build_tagger {
                 HashMap<Tag, Double> map2 = entry2.getValue();
                 for (Entry<Tag, Double> entry3: map2.entrySet()) {
                     Tag tag3 = entry3.getKey();
-                    double val1 = (unigramCount.get(tag3) - 0.999) / (tokenCount - 0.999);
-                    double val2 = (bigramCount.get(tag2).get(tag3) - 0.999) / (unigramCount.get(tag2) - 0.999);
-                    double val3 = (trigramCount.get(tag1).get(tag2).get(tag3) - 0.999) / (bigramCount.get(tag1).get(tag2) - 0.999);
+
+                    double val1;
+                    if (tokenCount == 1)
+                        val1 = 0;
+                    else
+                        val1 = (double) (unigramCount.get(tag3) - 1) / (tokenCount - 1);
+                    
+                    double val2;
+                     if (unigramCount.get(tag2) == 1)
+                        val2 = 0;
+                    else
+                        val2 = (double) (bigramCount.get(tag2).get(tag3) - 1) / (unigramCount.get(tag2) - 1);
+                    
+                    double val3;
+                    if(bigramCount.get(tag1).get(tag2) == 1)
+                        val3 = 0;
+                    else
+                        val3 = (double) (trigramCount.get(tag1).get(tag2).get(tag3) - 1) / (bigramCount.get(tag1).get(tag2) - 1);
                     
                     if (val1 > val2 && val1 > val3) 
                         lambda1 += trigramCount.get(tag1).get(tag2).get(tag3);
@@ -212,17 +240,31 @@ public class build_tagger {
         double lambdaSum = lambda1 + lambda2 + lambda3;
         lambda1 = lambda1 / lambdaSum;
         lambda2 = lambda2 / lambdaSum;
-        lambda3 = lambda3 / lambdaSum;
+        lambda3 = lambda3 / lambdaSum; 
+    }
+
+    private static void createModel() {
+        typeCount = 0;
+        tokenCount = 0;
+        for (Integer value: wordCount.values()) {
+            typeCount += 1;
+            tokenCount += value;
+        }
+        calculateNgrams();
+        calculateLambdas();
+        model = new Model(wordCount, unigramCount, lexicalCount, unigram, bigram, trigram, lambda1, lambda2, lambda3);
     }
 
     private static void test() {
+        Scanner scan = new Scanner(System.in);
         String line;
-        while ((line = new Scanner(System.in).nextLine()) != null)
+        do {
+            System.out.print("\n\n>> ");
+            line = scan.nextLine();
             model.tag(line.split(" "));
-        
+        } while (line != null);
+
         try {
-            if (debug)
-                System.out.println("reading the test file: " + developmentFile);
             BufferedReader reader = new BufferedReader(new FileReader(developmentFile));
 
             reader.close();
@@ -232,8 +274,6 @@ public class build_tagger {
     }
 
     private static void saveModel() {
-        if (debug)        
-            System.out.println("saving the model...");
         // TODO: Save the model
     }
 
@@ -273,9 +313,5 @@ public class build_tagger {
             count.put(key1, newMap);
         }
         incrementCount(count.get(key1), key2, key3);
-    }
-
-    private static void printTimer() {
-        System.out.println("timer > " + ((System.currentTimeMillis() - startTime) / 1000 ) + " seconds");
     }
 }
