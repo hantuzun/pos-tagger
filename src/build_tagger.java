@@ -62,7 +62,7 @@ public class build_tagger {
             developmentFile = new File(args[1]);
             modelFile = new File(args[2]);
         } else {
-            System.err.println("usage: java build_tagger <sents.train> <sents.devt> <model_file> [debug]");
+            System.err.println("usage: java build_tagger <sents.train> <sents.devt> <model_file>");
             System.exit(1);
         }
     }
@@ -115,19 +115,19 @@ public class build_tagger {
         }
 
         for (String str1: new Tag().getTags()) {
-                Tag tag1 = new Tag(str1);
-                
-                if (!unigramCount.containsKey(tag1)) {
-                    unigramCount.put(tag1, 0);
-                }
+            Tag tag1 = new Tag(str1);
+            
+            if (!unigramCount.containsKey(tag1)) {
+                unigramCount.put(tag1, 0);
+            }
 
-                int nominator = unigramCount.get(tag1);
-                int denominator = tokenCount;
-                if (denominator != 0) {
-                    unigram.put(tag1, (double) nominator / denominator);
-                } else {
-                    unigram.put(tag1, 0.0);
-                }
+            int nominator = unigramCount.get(tag1);
+            int denominator = tokenCount;
+            if (denominator != 0) {
+                unigram.put(tag1, (double) nominator / denominator);
+            } else {
+                unigram.put(tag1, 0.0);
+            }
         }
 
 
@@ -189,8 +189,6 @@ public class build_tagger {
                 }
             }
         }
-
-
     }
 
     private static void calculateLambdas() {
@@ -258,10 +256,14 @@ public class build_tagger {
     private static void test() {
         Scanner scan = new Scanner(System.in);
         String line;
+        Tag[] tags;
         do {
-            System.out.print("\n\n>> ");
-            line = scan.nextLine();
-            model.tag(line.split(" "));
+            System.out.print("\n>> ");
+            words = scan.nextLine().split(" ");
+            tags = model.tag(words);
+            for (Tag tag: tags) {
+                System.out.print(tag + " ");
+            }
         } while (line != null);
 
         try {

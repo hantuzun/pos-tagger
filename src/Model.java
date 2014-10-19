@@ -1,5 +1,5 @@
 import java.io.Serializable;
-import java.util.*;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -88,13 +88,14 @@ public class Model implements Serializable {
 		return (lambda1 * unigramValue) + (lambda2 * bigramValue) + (lambda3 * trigramValue);
 	}
 
-	public void tag(String[] words) {
+	public Tag[] tag(String[] words) {
 		int len = words.length;
 		Double[][] viberti = new Double[len][tags.size()];
 		Tag[][] backTrace = new Tag[len - 1][tags.size()];
 
 		for (int i = 0; i < tags.size(); i++) {
-			viberti[0][i] = transitionProbability(new Tag("<-1>"), new Tag("<0>"), tagArray[i]) * emissionProbability(tagArray[i], words[0]);
+			viberti[0][i] = Math.log(transitionProbability(new Tag("<-1>"), new Tag("<0>"), tagArray[i]));
+			viberti[0][i] += Math.log(emissionProbability(tagArray[i], words[0]));
 		}
 
 		// init
@@ -103,8 +104,9 @@ public class Model implements Serializable {
 				double max = - Double.MAX_VALUE;
 				Tag backPointer = new Tag();
 				for (int j = 0; j < tags.size(); j++) {
-					double val = transitionProbability(new Tag("<0>"), tagArray[j], tagArray[i]) * emissionProbability(tagArray[i], words[1]);
-					val *= viberti[0][j];
+					double val = Math.log(transitionProbability(new Tag("<0>"), tagArray[j], tagArray[i]));
+					val += Math.log(emissionProbability(tagArray[i], words[1]));
+					val += viberti[0][j];
 					if (val > max) {
 						max = val;
 						backPointer = tagArray[j];
@@ -122,8 +124,10 @@ public class Model implements Serializable {
 				Tag backPointer = new Tag();
 				for (int j = 0; j < tags.size(); j++) {
 					for (int k = 0; k < tags.size(); k++) {
-						double val = transitionProbability(tagArray[k], tagArray[j], tagArray[i]) * emissionProbability(tagArray[i], words[iter]);
-						val *= viberti[iter - 1][j] * viberti[iter - 2][k];
+						double val = Math.log(transitionProbability(tagArray[k], tagArray[j], tagArray[i]));
+						val += Math.log(emissionProbability(tagArray[i], words[iter]));
+						val += viberti[iter - 1][j];
+						val += viberti[iter - 2][k];
 						if (val > max) {
 							max = val;
 							backPointer = tagArray[j];
@@ -140,8 +144,8 @@ public class Model implements Serializable {
 		Tag backPointer = new Tag();
 		for (int i = 0; i < tags.size(); i++) {
 
-			double val = bigram.get(tagArray[i]).get(new Tag("<N+1>")); 
-			val *= viberti[len - 1][i];
+			double val = Math.log(bigram.get(tagArray[i]).get(new Tag("<N+1>"))); 
+			val += viberti[len - 1][i];
 			if (val > max) {
 				max = val;
 				backPointer = tagArray[i];
@@ -149,7 +153,6 @@ public class Model implements Serializable {
 		}		
 
 		// backtrack
-
 		Tag[] path = new Tag[len];
 		int p = 0;
 		path[len - 1] = backPointer;
@@ -160,8 +163,6 @@ public class Model implements Serializable {
 			path[i] = backPointer;
 		}
 
-		for (int i = 0; i < len; i++) {
-			System.out.print(path[i] + " "); 
-		}
+		return path;
 	}
 }
