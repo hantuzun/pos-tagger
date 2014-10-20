@@ -45,6 +45,17 @@ public class build_tagger {
     
     private static Model model;
 
+    private static HashMap<Tag, Integer> truePositives = new HashMap<Tag, Integer>();
+    private static HashMap<Tag, Integer> falsePositives = new HashMap<Tag, Integer>();
+    private static HashMap<Tag, Integer> falseNegatives = new HashMap<Tag, Integer>();
+    private static HashMap<Tag, Double> precision = new HashMap<Tag, Double>();
+    private static HashMap<Tag, Double> accuracy = new HashMap<Tag, Double>();
+    private static HashMap<Tag, Double> f1Score = new HashMap<Tag, Double>();
+
+    private static int tp;
+    private static int fp;
+    private static int fn;
+
     /**
      * build_tagger.java
      * usage: java build_tagger <sents.train> <sents.devt> <model_file>
@@ -53,8 +64,47 @@ public class build_tagger {
         validateArguments(args);
         train();
         createModel();
+        System.out.println("Model created");
         saveModel(args);
+        System.out.println("Model saved");
+        System.out.println("Testing the development data...");
+        test();
+        System.out.println("Testing complete");
+        printStats();
         System.exit(0);
+    }
+
+    private static void printStats() {
+        tp = 0;
+        fp = 0;
+        fn = 0;
+        for (String str: new Tag().getTags()) {
+            Tag tag = new Tag(str);
+            tp += truePositives.get(tag);
+            fp += falsePositives.get(tag);
+            fn += falseNegatives.get(tag);
+            precision.put(tag, (double) truePositives.get(tag) / (truePositives.get(tag) + falsePositives.get(tag)));
+            accuracy.put(tag, (double) truePositives.get(tag) / (truePositives.get(tag) + falseNegatives.get(tag)));
+            f1Score.put(tag, 2 * (precision.get(tag) + accuracy.get(tag)) / (precision.get(tag) * accuracy.get(tag)));
+        }
+
+        for (String str: new Tag().getTags()) {
+            Tag tag = new Tag(str);
+            System.out.print(tag + "  ");
+            System.out.printf("\t %4d", truePositives.get(tag));
+            System.out.printf("\t %4d", falsePositives.get(tag));
+            System.out.printf("\t %4d", falseNegatives.get(tag));
+            System.out.printf("\t %.4f", precision.get(tag));
+            System.out.printf("\t %.4f", accuracy.get(tag));
+            System.out.printf("\t %2.4f", f1Score.get(tag));
+            System.out.println();
+        }   
+
+        System.out.println();
+        double pre = (double) tp / (tp + fp);
+        double acc = (double) tp / (tp + fn);
+        double f1 = 2 * (acc + pre) / (acc * pre);
+        System.out.println(tp + " " + fp + " " + fn + " " + pre + " " + acc + " " + f1);
     }
 
     private static void validateArguments(String[] args) {
@@ -83,7 +133,7 @@ public class build_tagger {
                     incrementCount(bigramCount, tagPrevPrev, tagPrev);
                     for (String tuple : line.split(" ")) {
                         int split = tuple.lastIndexOf('/');
-                        String word = tuple.substring(0, split);
+                        String word = tuple.substring(0, split).replaceAll("\\d+", "\\#");
                         String tagString = tuple.substring(split + 1);
                         tag = new Tag(tagString);
                         
@@ -281,6 +331,48 @@ public class build_tagger {
                 }
             }
         } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void test() {
+        for (String str: new Tag().getTags()) {
+            Tag tag = new Tag(str);
+            truePositives.put(tag, 0);
+            falsePositives.put(tag, 0);
+            falseNegatives.put(tag, 0);
+        }
+
+        try {
+            BufferedReader reader = new BufferedReader(new FileReader(developmentFile));
+            try {
+                String line;
+                int count = 0;
+                while ((line = reader.readLine()) != null) {
+                    System.out.println(++count);
+                    String[] tuples = line.split(" ");
+                    String[] words = new String[tuples.length];
+                    Tag[] trueTags = new Tag[tuples.length];
+                    for (int i = 0; i < tuples.length; i++) {
+                        int split = tuples[i].lastIndexOf('/');
+                        words[i] = tuples[i].substring(0, split);
+                        trueTags[i] = new Tag(tuples[i].substring(split + 1));
+                    }
+                    Tag[] assignedTags = model.tag(words);
+
+                    for (int i = 0; i < tuples.length; i++) {
+                        if (trueTags[i].equals(assignedTags[i])) {
+                            incrementCount(truePositives, trueTags[i]);
+                        } else {
+                            incrementCount(falseNegatives, trueTags[i]);
+                            incrementCount(falsePositives, assignedTags[i]);
+                        }
+                    }
+                }
+            } finally {
+                reader.close();
+            }
+        } catch(IOException e) {
             e.printStackTrace();
         }
     }

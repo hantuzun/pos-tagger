@@ -52,7 +52,6 @@ public final class Tag implements Serializable{
             return true;
     }
 
-
     private void readObject(ObjectInputStream inputStream) throws ClassNotFoundException, IOException {
         inputStream.defaultReadObject();
     }

@@ -72,6 +72,10 @@ public class Model implements Serializable {
 	}
 
 	public Tag[] tag(String[] words) {
+		// Convert numeric characters to '\#'
+		for (String word: words) {
+			word = word.replaceAll("\\d+", "\\#");
+		}
 
 		Double[][] viberti = new Double[words.length][tagsArray.length];
 		Tag[][] backTrace = new Tag[words.length - 1][tagsArray.length];
