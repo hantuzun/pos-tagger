@@ -21,16 +21,6 @@ public class run_tagger {
 		validateArguments(args);
 		loadModel(args);
 		test();
-        
-        String[] words = "For six years , T. Marshall Hahn Jr. has made corporate acquisitions in the George Bush mode : kind and gentle .".split(" ");
-        Tag[] tags = model.tag(words);
-        
-        System.out.println();
-        for (Tag tag: tags) 
-            System.out.print(tag + " ");
-        System.out.println();
-        System.out.println("IN CD NNS , NNP NNP NNP NNP VBZ VBN JJ NNS IN DT NNP NNP NN : JJ CC JJ . ");
-
         System.exit(0);
 	}
 
@@ -63,5 +53,28 @@ public class run_tagger {
 	}
 
 	public static void test() {
+		try {
+            BufferedReader reader = new BufferedReader(new FileReader(testFile));
+            BufferedWriter writer = new BufferedWriter(new FileWriter(outFile));
+            try {
+            	String line;
+                while ((line = reader.readLine()) != null) {
+                	String[] words = line.split(" ");
+                	Tag[] tags = model.tag(words);
+
+                	writer.write(words[0] + "/" + tags[0]);
+                	for (int i = 1; i < words.length; i++) {
+                		writer.write(" " + words[i] + "/" + tags[i]);
+                	}
+                	writer.newLine();
+                }
+            } finally {
+            	reader.close();
+            	writer.flush();
+            	writer.close();
+            }
+		} catch(IOException e) {
+			e.printStackTrace();
+		}
 	}
 }
